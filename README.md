@@ -102,6 +102,11 @@ python app.py
 
 http://127.0.0.1:5000
 
+### 4. Also i have already hosted it so can be accessed using
+```
+https://stego-site-mpha.onrender.com/
+```
+
 ---
 
 ## Project Structure
