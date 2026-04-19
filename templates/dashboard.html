@@ -1,0 +1,46 @@
+{% extends "base.html" %} {% block content %}
+
+<h2 class="mb-4">Dashboard</h2>
+
+<div class="mb-4">
+  <h5>Welcome, {{ current_user.username }}</h5>
+  <p class="text-light">Manage your steganography files and account.</p>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+  <div class="col-md-4">
+    <a href="/create" class="btn btn-primary w-100">Create Stego</a>
+  </div>
+  <div class="col-md-4">
+    <a href="/my-posts" class="btn btn-outline-secondary w-100">My Posts</a>
+  </div>
+  <div class="col-md-4">
+    <a href="/profile" class="btn btn-outline-secondary w-100">Profile</a>
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+  <div class="card-header">Recent Activity</div>
+  <div class="card-body">
+    {% if current_user.posts %}
+    <ul class="list-group">
+      {% for post in current_user.posts[-5:] %}
+      <li
+        class="list-group-item d-flex justify-content-between align-items-center"
+      >
+        {{ post.filename }}
+        <a href="/download/{{ post.filename }}" class="btn btn-sm btn-success">
+          Download
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted">No posts yet. Create your first stego file.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

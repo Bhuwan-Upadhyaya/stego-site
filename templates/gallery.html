@@ -1,0 +1,36 @@
+{% extends "base.html" %} {% block content %}
+<h2 class="mb-4">Public Gallery</h2>
+
+<div class="row">
+  {% for post in posts %}
+  <div class="col-md-4">
+    <div class="card mb-4 shadow-sm">
+      <!-- Image Preview (only if image) -->
+      {% if post.filename.endswith('.jpg') or post.filename.endswith('.png') or
+      post.filename.endswith('.jpeg') %}
+      <img
+        src="{{ url_for('static', filename='outputs/' + post.filename) }}"
+        class="card-img-top"
+        style="height: 200px; object-fit: cover"
+      />
+      {% endif %}
+
+      <div class="card-body">
+        <h5 class="card-title">{{ post.filename }}</h5>
+
+        <p class="card-text mb-1"><strong>Mode:</strong> {{ post.mode }}</p>
+        <p class="card-text">
+          <strong>S:</strong> {{ post.start_bit }} | <strong>L:</strong> {{
+          post.interval_l }}
+        </p>
+
+        <a href="/download/{{ post.filename }}" class="btn btn-success w-100">
+          Download
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %} {% block content %}
+<div class="text-center mt-5">
+  <h1>Welcome to StegoVault 🔐</h1>
+  <p class="lead">Hide secret messages inside files using steganography</p>
+
+  {% if not current_user.is_authenticated %}
+  <a href="/register" class="btn btn-primary">Get Started</a>
+  {% endif %}
+</div>
+{% endblock %}
