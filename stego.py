@@ -89,8 +89,7 @@ def embed_message(carrier_bytes: bytes, secret_bytes: bytes, secret_filename: st
 
     carrier = bytearray(carrier_bytes)
 
-    # skip header region
-    SAFE_START = max(start_bit, 4096)  # 4096 bits = 512 bytes
+    SAFE_START = max(start_bit, 4096)
     byte_index = SAFE_START // 8
 
     gaps = interval_generator(l_value, mode)
@@ -99,7 +98,7 @@ def embed_message(carrier_bytes: bytes, secret_bytes: bytes, secret_filename: st
         if byte_index >= len(carrier):
             raise ValueError("Carrier too small")
 
-        # ONLY LSB modification
+        # modify only LSB
         carrier[byte_index] = (carrier[byte_index] & 0b11111110) | bit
 
         step = max(1, next(gaps) // 8)
@@ -109,29 +108,61 @@ def embed_message(carrier_bytes: bytes, secret_bytes: bytes, secret_filename: st
 
 
 # ======================
-# SAFE EXTRACTION
+# FIXED EXTRACTION (IMPORTANT)
 # ======================
 def extract_message(stego_bytes: bytes, start_bit: int, l_value: int, mode: str, max_payload_bytes: int = 10_000_000):
 
     carrier = stego_bytes
 
     SAFE_START = max(start_bit, 4096)
-    byte_index = SAFE_START // 8
+    start_byte = SAFE_START // 8
 
+    # -------- STEP 1: READ HEADER (80 bits) --------
+    byte_index = start_byte
     gaps = interval_generator(l_value, mode)
 
-    bits = []
+    header_bits = []
 
-    for _ in range(max_payload_bytes * 8):
+    for _ in range(80):  # 10 bytes * 8
         if byte_index >= len(carrier):
-            break
+            raise ValueError("Not enough data to extract header")
 
-        bits.append(carrier[byte_index] & 1)
+        header_bits.append(carrier[byte_index] & 1)
 
         step = max(1, next(gaps) // 8)
         byte_index += step
 
-    payload_bytes = bits_to_bytes(bits)
+    header_bytes = bits_to_bytes(header_bits)
+
+    if header_bytes[:4] != MAGIC:
+        raise ValueError("No valid hidden payload found")
+
+    data_len = struct.unpack(">I", header_bytes[4:8])[0]
+    name_len = struct.unpack(">H", header_bytes[8:10])[0]
+
+    total_payload_len = 4 + 4 + 2 + name_len + data_len
+
+    if total_payload_len > max_payload_bytes:
+        raise ValueError("Payload too large or invalid")
+
+    total_payload_bits = total_payload_len * 8
+
+    # -------- STEP 2: READ FULL PAYLOAD --------
+    byte_index = start_byte
+    gaps = interval_generator(l_value, mode)
+
+    payload_bits = []
+
+    for _ in range(total_payload_bits):
+        if byte_index >= len(carrier):
+            raise ValueError("Incomplete payload")
+
+        payload_bits.append(carrier[byte_index] & 1)
+
+        step = max(1, next(gaps) // 8)
+        byte_index += step
+
+    payload_bytes = bits_to_bytes(payload_bits)
 
     return parse_payload(payload_bytes)
 
@@ -146,7 +177,7 @@ if __name__ == "__main__":
     secret = b"Hello Bhuwan, this works!"
     name = "secret.txt"
 
-    S = 1024
+    S = 2048
     L = 8
     mode = "fixed"
 
