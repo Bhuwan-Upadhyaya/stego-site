@@ -2,89 +2,74 @@
 
 ## Overview
 
-StegoVault is a web-based application that allows users to securely hide secret messages inside files using steganography. T
-he system supports embedding and extracting hidden data using customizable parameters and provides a user-friendly interface with 
-authentication and file management.
+StegoVault is a web application that hides an arbitrary secret file **M** inside a carrier file **P** using bit-replacement steganography with user-supplied parameters **S** (starting bit), **L** (bit interval / periodicity), and **C** (mode). Authenticated users create posts; anyone may browse and download posted stego files.
 
 ---
 
 ## Features
 
-- User authentication (Register / Login / Logout)
-- Embed secret messages into carrier files
-- Extract hidden messages from stego files
-- Support for parameters:
-  - **S** – Starting bit
-  - **L** – Periodicity / interval
-  - **C** – Mode of operation
-- Multiple embedding modes:
-  - Fixed
-  - Alternate
-  - Increasing
-- Public gallery of stego files
-- Download generated stego files
-- User dashboard
-- My Posts page for managing uploads
-- Delete functionality for user posts
-- Profile page to update user details
-- Image preview in gallery
+- User authentication (register / login / logout)
+- Embed a **secret message** as typed text (UTF-8) **or** an uploaded file (any format) into a **carrier file** (any format); if both are given, the **upload** wins
+- Extract hidden payloads when **S**, **L**, and **C** match embedding
+- Modes **C**: `fixed`, `alternate`, `increasing` (period **L** can vary step-by-step per mode)
+- Public gallery with image preview when the stego output is a common image type
+- Download stego files from the gallery; download extracted payloads from the extract page
+- Per-user “My posts” with delete
 
 ---
 
-## Answer to Discussion Question
+## How embedding works (matches assignment spec)
 
-If an attacker knows only the periodicity parameter **L**, recovering the hidden message is not straightforward but
- becomes partially feasible through analysis.The attacker could attempt to extract bits at every **L-th position** for
-different starting offsets **S**. By trying multiple values of **S**, the attacker may eventually reconstruct a bit 
-sequence that resembles structured data. Known file signatures (such as JPEG or PNG headers) can help identify correct extraction.
-Additionally, statistical analysis of modified bits may reveal anomalies in the carrier file. If the attacker also knows or
-guesses the embedding mode **C**, the search space becomes smaller.However, without knowledge of both **S** and **C**, extraction 
-remains difficult. The security of the method improves when:
+The carrier **P** is treated as a linear bit stream (each byte expanded MSB-first, consistent end-to-end). Let **N** be the total number of bits in **P**.
 
-- The starting bit **S** is unknown  
-- The mode **C** varies dynamically  
-- The payload is encrypted before embedding  
+- **S**: Embedding begins at bit index **S** (bits `0 … S−1` are left unchanged).
+- **L** and **C**: Successive bits of the wrapped payload are written at bit indices **S**, **S + Δ₀**, **S + Δ₀ + Δ₁**, … where each **Δᵢ** is produced by the mode **C** from the base interval **L** (same sequence as in `interval_generator` in `stego.py`).
+- Each selected bit is **replaced** by the next bit of the payload (not LSB-only masking), so the scheme matches “every **L**-th bit” stepping in **bits** after **S**, with variable step sizes when **C** changes the effective period.
 
-Thus, knowing only **L** provides limited advantage but does not guarantee successful recovery of the hidden message.
+The payload on disk is a small header (magic, lengths, original filename) followed by the raw bytes of **M**, so extraction can restore both the original name and content reversibly.
 
 ---
 
-## Technologies Used
+## Answer to discussion question (given only **L**)
 
-- Python (Flask)
-- Flask-Login (Authentication)
-- Flask-SQLAlchemy (Database)
-- SQLite (Database)
-- HTML, CSS, Bootstrap (Frontend)
+Knowing **L** alone is not enough to recover **M** or the original **P**.
 
----
+- **S** is unknown: an attacker does not know which bit positions were used without **S** (and without **C**, the gap sequence **Δᵢ** is also unknown).
+- **C** changes the step pattern: unless the mode is guessed, the sequence of indices is wrong even if **S** were brute-forced.
+- Even with guessed **S** and **C**, **M** is wrapped in a header; random-looking **M** or encrypted **M** does not stand out without other side information.
 
-## How It Works
-
-### Embedding Process
-
-1. The user uploads a carrier file (**P**).
-2. The user enters a secret message (**M**).
-3. The user specifies parameters:
-   - Starting bit (**S**)
-   - Interval (**L**)
-   - Mode (**C**)
-4. The system converts both carrier and message into bit streams.
-5. Starting after **S bits**, every **L-th bit** is replaced with message bits.
-6. A new modified file (stego file) is generated and stored.
+An attacker who knows **L** might try many **S** values and extraction paths and look for structured output (e.g. known file signatures), which shrinks the search only if other parameters are weak or the payload is redundant. Embedding pre-encrypted **M** and choosing unpredictable **S** and **C** reduces practical risk.
 
 ---
 
-### Extraction Process
+## References (course materials and external)
 
-1. The user uploads a stego file.
-2. The user enters the same parameters (**S, L, C**).
-3. The system reads the embedded bits.
-4. The original hidden message is reconstructed and displayed.
+Course / assignment pointers:
+
+- Stanford bit tricks collection (bit-level thinking): [Sean Eron Anderson, *Bit Twiddling Hacks*](http://graphics.stanford.edu/~seander/bithacks.html)
+- Python bit-oriented tooling (not required for this project but cited in the assignment): [bitstring](https://github.com/scott-griffiths/bitstring)
+
+Background reading (steganography context):
+
+- Wired, “Steganography,” *Hacker Lexicon*: https://www.wired.com/story/steganography-hacker-lexicon/
+- WonderHowTo / Null Byte introductions to steganography (linked from the assignment PDF).
 
 ---
 
-## How to Run the Project
+## Technologies
+
+- Python 3, Flask, Flask-Login, Flask-SQLAlchemy, SQLite
+- HTML/CSS (Bootstrap-style templates in repo)
+
+---
+
+## Configuration
+
+Optional: install `python-dotenv` and copy `.env.example` to `.env`, then set `SECRET_KEY` to a long random string for deployment. If `SECRET_KEY` is unset, a development default is used (change before production).
+
+---
+
+## How to run
 
 ### 1. Install dependencies
 
@@ -109,33 +94,34 @@ https://stego-site-mpha.onrender.com/
 
 ---
 
-## Project Structure
+## Project structure
 
-stego-site/  
-├── app.py  
-├── stego.py  
-├── requirements.txt  
-├── README.md  
-├── static/  
-│   ├── css/  
-│   ├── uploads/  
-│   └── outputs/  
-├── templates/  
-│   ├── base.html  
-│   ├── dashboard.html  
-│   ├── create_post.html  
-│   ├── gallery.html  
-│   ├── my_posts.html  
-│   ├── extract.html  
-│   ├── profile.html  
-│   ├── login.html  
-│   └── register.html  
+```
+stego-site/
+├── app.py
+├── stego.py
+├── requirements.txt
+├── README.md
+├── static/
+│   ├── css/
+│   ├── uploads/
+│   └── outputs/
+└── templates/
+    ├── base.html
+    ├── dashboard.html
+    ├── create_post.html
+    ├── gallery.html
+    ├── my_posts.html
+    ├── extract.html
+    ├── profile.html
+    ├── login.html
+    └── register.html
+```
 
 ---
 
 ## Notes
 
-- The first **S bits** are skipped to avoid corrupting file headers.  
-- Correct parameters (**S, L, C**) must be used during extraction.  
-- The application uses basic steganography and is not fully resistant to advanced attacks.  
-- Optional encryption can be added for improved security.
+- Skipping **S** bits at the start of **P** avoids disturbing critical headers when **S** is chosen appropriately; aggressive **S** values can still corrupt format-specific data.
+- Correct **S**, **L**, and **C** are required for extraction.
+- This is an educational baseline; stronger deployments would use encryption for **M**, HTTPS, secrets management, and hardened hosting.

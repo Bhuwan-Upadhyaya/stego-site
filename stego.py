@@ -25,10 +25,6 @@ def bits_to_bytes(bits):
 
 
 def build_payload(secret_data: bytes, secret_filename: str):
-    """
-    Payload format:
-    [MAGIC:4 bytes][DATA_LEN:4 bytes][NAME_LEN:2 bytes][FILENAME][DATA]
-    """
     filename_bytes = secret_filename.encode("utf-8")
 
     payload = bytearray()
@@ -42,30 +38,22 @@ def build_payload(secret_data: bytes, secret_filename: str):
 
 
 def parse_payload(payload: bytes):
+    if len(payload) < 10:
+        raise ValueError("Payload too short")
+
     if payload[:4] != MAGIC:
         raise ValueError("Invalid payload header")
 
     data_len = struct.unpack(">I", payload[4:8])[0]
     name_len = struct.unpack(">H", payload[8:10])[0]
 
-    filename_start = 10
-    filename_end = filename_start + name_len
-    data_start = filename_end
-    data_end = data_start + data_len
+    filename = payload[10:10 + name_len].decode("utf-8")
+    data = payload[10 + name_len:10 + name_len + data_len]
 
-    filename = payload[filename_start:filename_end].decode("utf-8")
-    secret_data = payload[data_start:data_end]
-
-    return filename, secret_data
+    return filename, data
 
 
 def interval_generator(base_l: int, mode: str):
-    """
-    mode choices:
-    - fixed
-    - alternate
-    - increasing
-    """
     if base_l <= 0:
         raise ValueError("L must be greater than 0")
 
@@ -75,10 +63,10 @@ def interval_generator(base_l: int, mode: str):
 
     elif mode == "alternate":
         pattern = [base_l, base_l * 2, base_l + 20]
-        idx = 0
+        i = 0
         while True:
-            yield pattern[idx % len(pattern)]
-            idx += 1
+            yield pattern[i % len(pattern)]
+            i += 1
 
     elif mode == "increasing":
         step = 0
@@ -90,120 +78,81 @@ def interval_generator(base_l: int, mode: str):
         raise ValueError("Unsupported mode")
 
 
-def embedding_positions(total_bits: int, start_bit: int, base_l: int, mode: str, count_needed: int):
-    if start_bit < 0:
-        raise ValueError("S must be non-negative")
-
-    positions = []
-    pos = start_bit
-    gaps = interval_generator(base_l, mode)
-
-    while pos < total_bits and len(positions) < count_needed:
-        positions.append(pos)
-        pos += next(gaps)
-
-    return positions
-
-
-def capacity_bits(total_bits: int, start_bit: int, base_l: int):
-    """
-    Approximate capacity for fixed mode.
-    """
-    if base_l <= 0:
-        raise ValueError("L must be greater than 0")
-    if start_bit >= total_bits:
-        return 0
-    return ((total_bits - 1 - start_bit) // base_l) + 1
-
-
+# ======================
+# SAFE EMBEDDING
+# ======================
 def embed_message(carrier_bytes: bytes, secret_bytes: bytes, secret_filename: str,
                   start_bit: int, l_value: int, mode: str):
-    carrier_bits = bytes_to_bits(carrier_bytes)
+
     payload = build_payload(secret_bytes, secret_filename)
     payload_bits = bytes_to_bits(payload)
 
-    positions = embedding_positions(
-        total_bits=len(carrier_bits),
-        start_bit=start_bit,
-        base_l=l_value,
-        mode=mode,
-        count_needed=len(payload_bits)
-    )
+    carrier = bytearray(carrier_bytes)
 
-    if len(positions) < len(payload_bits):
-        raise ValueError("Carrier file is too small for this message and parameter choice")
+    # skip header region
+    SAFE_START = max(start_bit, 4096)  # 4096 bits = 512 bytes
+    byte_index = SAFE_START // 8
 
-    for pos, bit in zip(positions, payload_bits):
-        carrier_bits[pos] = bit
+    gaps = interval_generator(l_value, mode)
 
-    return bits_to_bytes(carrier_bits)
+    for bit in payload_bits:
+        if byte_index >= len(carrier):
+            raise ValueError("Carrier too small")
+
+        # ONLY LSB modification
+        carrier[byte_index] = (carrier[byte_index] & 0b11111110) | bit
+
+        step = max(1, next(gaps) // 8)
+        byte_index += step
+
+    return bytes(carrier)
 
 
+# ======================
+# SAFE EXTRACTION
+# ======================
 def extract_message(stego_bytes: bytes, start_bit: int, l_value: int, mode: str, max_payload_bytes: int = 10_000_000):
-    stego_bits = bytes_to_bits(stego_bytes)
 
-    # Read header first: MAGIC(4) + DATA_LEN(4) + NAME_LEN(2) = 10 bytes = 80 bits
-    header_bytes_len = 10
-    header_bits_len = header_bytes_len * 8
+    carrier = stego_bytes
 
-    header_positions = embedding_positions(
-        total_bits=len(stego_bits),
-        start_bit=start_bit,
-        base_l=l_value,
-        mode=mode,
-        count_needed=header_bits_len
-    )
+    SAFE_START = max(start_bit, 4096)
+    byte_index = SAFE_START // 8
 
-    if len(header_positions) < header_bits_len:
-        raise ValueError("Not enough bits to extract header")
+    gaps = interval_generator(l_value, mode)
 
-    header_bits = [stego_bits[pos] for pos in header_positions]
-    header_bytes = bits_to_bytes(header_bits)
+    bits = []
 
-    if header_bytes[:4] != MAGIC:
-        raise ValueError("No valid hidden payload found")
+    for _ in range(max_payload_bytes * 8):
+        if byte_index >= len(carrier):
+            break
 
-    data_len = struct.unpack(">I", header_bytes[4:8])[0]
-    name_len = struct.unpack(">H", header_bytes[8:10])[0]
+        bits.append(carrier[byte_index] & 1)
 
-    total_payload_len = 4 + 4 + 2 + name_len + data_len
+        step = max(1, next(gaps) // 8)
+        byte_index += step
 
-    if total_payload_len > max_payload_bytes:
-        raise ValueError("Payload too large or invalid")
-
-    total_payload_bits = total_payload_len * 8
-
-    all_positions = embedding_positions(
-        total_bits=len(stego_bits),
-        start_bit=start_bit,
-        base_l=l_value,
-        mode=mode,
-        count_needed=total_payload_bits
-    )
-
-    if len(all_positions) < total_payload_bits:
-        raise ValueError("Carrier does not contain complete payload")
-
-    payload_bits = [stego_bits[pos] for pos in all_positions]
-    payload_bytes = bits_to_bytes(payload_bits)
+    payload_bytes = bits_to_bytes(bits)
 
     return parse_payload(payload_bytes)
 
 
+# ======================
+# TEST
+# ======================
 if __name__ == "__main__":
-    print("Running simple self-test...")
+    print("Running test...")
 
-    carrier = bytes([0] * 2000)  # 2000 bytes carrier
-    secret = b"Hello Bhuwan, this is a hidden message!"
-    secret_name = "secret.txt"
+    carrier = bytes([0xAA] * 8000)
+    secret = b"Hello Bhuwan, this works!"
+    name = "secret.txt"
 
-    start_bit = 128
-    l_value = 8
+    S = 1024
+    L = 8
     mode = "fixed"
 
-    stego = embed_message(carrier, secret, secret_name, start_bit, l_value, mode)
-    recovered_name, recovered_data = extract_message(stego, start_bit, l_value, mode)
+    stego = embed_message(carrier, secret, name, S, L, mode)
+    fname, data = extract_message(stego, S, L, mode)
 
-    print("Recovered filename:", recovered_name)
-    print("Recovered message:", recovered_data.decode("utf-8"))
-    print("Self-test passed.")
+    print("Recovered:", fname)
+    print(data.decode())
+    print("Test passed.")

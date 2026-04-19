@@ -1,5 +1,6 @@
-Flask
-Flask-Login
-Flask-SQLAlchemy
-Werkzeug
-gunicorn
+Flask>=3.0
+Flask-Login>=0.6
+Flask-SQLAlchemy>=3.1
+Werkzeug>=3.0
+python-dotenv>=1.0
+gunicorn>=22.0

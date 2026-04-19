@@ -1,36 +1,62 @@
 {% extends "base.html" %} {% block content %}
+
 <h2 class="mb-4">Public Gallery</h2>
 
 <div class="row">
   {% for post in posts %}
   <div class="col-md-4">
     <div class="card mb-4 shadow-sm">
-      <!-- Image Preview (only if image) -->
-      {% if post.filename.endswith('.jpg') or post.filename.endswith('.png') or
-      post.filename.endswith('.jpeg') %}
+      <!-- IMAGE PREVIEW -->
+      {% set file = post.filename.lower() %} {% if file.endswith('.png') or
+      file.endswith('.jpg') or file.endswith('.jpeg') %}
       <img
         src="{{ url_for('static', filename='outputs/' + post.filename) }}"
         class="card-img-top"
         style="height: 200px; object-fit: cover"
+        alt="Preview"
+        onerror="
+          this.style.display = 'none';
+          this.nextElementSibling.style.display = 'block';
+        "
       />
       {% endif %}
 
-      <div class="card-body">
-        <h5 class="card-title">{{ post.filename }}</h5>
+      <!-- FALLBACK (if image breaks) -->
+      <div class="text-center p-4 text-muted" style="display: none">
+        <p class="mb-1">Preview not available</p>
+        <small>(File may be corrupted or unsupported)</small>
+      </div>
 
-        <p class="card-text mb-1"><strong>Mode:</strong> {{ post.mode }}</p>
-        <p class="card-text">
+      <div class="card-body">
+        <!-- FILE NAME -->
+        <h5 class="card-title text-truncate">{{ post.filename }}</h5>
+
+        <!-- SECRET FILE -->
+        {% if post.secret_filename %}
+        <p class="mb-1"><strong>Hidden:</strong> {{ post.secret_filename }}</p>
+        {% endif %}
+
+        <!-- PARAMETERS -->
+        <p class="mb-1"><strong>Mode:</strong> {{ post.mode }}</p>
+        <p class="mb-2">
           <strong>S:</strong> {{ post.start_bit }} | <strong>L:</strong> {{
           post.interval_l }}
         </p>
 
-        <a href="/download/{{ post.filename }}" class="btn btn-success w-100">
-          Download
-        </a>
+        <!-- ACTIONS -->
+        <div class="d-flex gap-2">
+          <a href="/download/{{ post.filename }}" class="btn btn-success w-100">
+            Download
+          </a>
+        </div>
       </div>
     </div>
   </div>
   {% endfor %}
 </div>
 
-{% endblock %}
+{% if posts|length == 0 %}
+<div class="text-center text-muted mt-4">
+  <p>No stego files uploaded yet.</p>
+</div>
+{% endif %} {% endblock %}

@@ -1,0 +1,48 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Environment variables
+.env
+
+# Flask instance folder (database)
+instance/
+*.db
+
+# Uploads / generated files (optional)
+static/uploads/
+static/outputs/
+
+# Logs
+*.log
+
+# Gunicorn / deployment
+*.pid
+*.sock
+
+# Temporary files
+*.tmp
+*.swp
+
+# Jupyter (if used)
+.ipynb_checkpoints/
+
+# Node (just in case)
+node_modules/
+
+# Build / dist
+build/
+dist/
